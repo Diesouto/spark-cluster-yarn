@@ -1,56 +1,82 @@
-FROM ubuntu:20.04
+FROM adbgonzalez/hadoop:test-lean
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV HADOOP_VERSION=3.4.2
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-ENV HADOOP_HOME=/usr/local/hadoop
-ENV HADOOP_INSTALL=$HADOOP_HOME
-ENV HADOOP_MAPRED_HOME=$HADOOP_HOME
-ENV HADOOP_COMMON_HOME=$HADOOP_HOME
-ENV HADOOP_HDFS_HOME=$HADOOP_HOME
-ENV HADOOP_YARN_HOME=$HADOOP_HOME
-ENV HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
-ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
-ENV HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"
+# --- pasar a root para instalar e preparar Spark ---
+USER root
 
 # Instalar paquetes (sen recomendados) e limpar caches NA MESMA CAPA
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      openjdk-11-jdk-headless ssh rsync wget curl net-tools ca-certificates \
+      python3 \
+      wget \
+      ca-certificates \
+      tar \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-# Crear usuario/grupo
-RUN groupadd --gid 1000 hadoop \
- && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash hadoop
+# ---- Spark ----
+ARG SPARK_VERSION=3.5.7
+ARG SPARK_FILE=spark-${SPARK_VERSION}-bin-hadoop3.tgz
+ARG SPARK_URL=https://downloads.apache.org/spark/spark-${SPARK_VERSION}/${SPARK_FILE}
 
-WORKDIR /home/hadoop
+ENV SPARK_HOME=/opt/spark
 
-# Descargar, extraer e borrar o tarball na MESMA capa
-RUN set -eux; \
-    url="https://downloads.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}-lean.tar.gz"; \
-    wget -O /tmp/hadoop.tar.gz "$url"; \
-    tar -xzf /tmp/hadoop.tar.gz -C /usr/local/; \
-    mv /usr/local/hadoop-${HADOOP_VERSION} ${HADOOP_HOME}; \
-    rm -f /tmp/hadoop.tar.gz; \
-    chown -R hadoop:hadoop ${HADOOP_HOME}
+RUN wget -q ${SPARK_URL} \
+ && mkdir -p ${SPARK_HOME} \
+ && tar -xzf ${SPARK_FILE} -C ${SPARK_HOME} --strip-components 1 \
+ && rm -f ${SPARK_FILE}
 
-# Dirs de datos
-RUN install -d -o hadoop -g hadoop /home/hadoop/namenode /home/hadoop/datanode
+# variables de entorno (unificadas e sen conflitos)
+ENV HADOOP_CONF_DIR=${HADOOP_HOME}/etc/hadoop
+ENV LD_LIBRARY_PATH=${HADOOP_HOME}/lib/native
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV SPARK_CONF=${SPARK_HOME}/conf
+ENV SPARK_LOG_DIR=hdfs:///spark-logs
+ENV SPARK_HISTORY_UI_PORT=18080
+ENV SPARK_EVENTLOG_ENABLED=true
+ENV SPARK_HISTORY_FS_LOG_DIRECTORY=hdfs:///spark-logs
+ENV SPARK_EVENT_LOG_DIR=${SPARK_HISTORY_FS_LOG_DIRECTORY}
+ENV SPARK_DAEMON_MEMORY=2g
+ENV SPARK_HISTORY_FS_CLEANER_ENABLED=true
+ENV SPARK_HISTORY_STORE_MAXDISKUSAGE=100g
+ENV SPARK_HISTORY_FS_CLEANER_INTERVAL=8h
+ENV SPARK_HISTORY_FS_CLEANER_MAXAGE=5d
+ENV SPARK_HISTORY_FS_UPDATE_INTERVAL=10s
+ENV SPARK_HISTORY_RETAINED_APPLICATIONS=100
+ENV SPARK_HISTORY_UI_MAXAPPLICATIONS=500
 
-# Config
-COPY conf/core-site.xml $HADOOP_HOME/etc/hadoop/
-COPY conf/hdfs-site.xml $HADOOP_HOME/etc/hadoop/
-COPY conf/mapred-site.xml $HADOOP_HOME/etc/hadoop/
-COPY conf/yarn-site.xml $HADOOP_HOME/etc/hadoop/
+# corrixido: "native" e non "nativ"
+ENV HADOOP_INSTALL=${HADOOP_HOME}
+ENV HADOOP_MAPRED_HOME=${HADOOP_HOME}
+ENV HADOOP_COMMON_HOME=${HADOOP_HOME}
+ENV HADOOP_HDFS_HOME=${HADOOP_HOME}
+ENV HADOOP_YARN_HOME=${HADOOP_HOME}
+ENV HADOOP_COMMON_LIB_NATIVE_DIR=${HADOOP_HOME}/lib/native
+ENV HADOOP_OPTS="-Djava.library.path=${HADOOP_HOME}/lib/native"
 
+# PATHs
+ENV PATH=${HADOOP_HOME}/sbin:${HADOOP_HOME}/bin:${SPARK_HOME}/bin:${SPARK_HOME}/sbin:${PATH}
+
+# spark-env: definir HADOOP_CONF_DIR/JAVA_HOME e SPARK_DIST_CLASSPATH dinámico
+RUN mkdir -p ${SPARK_CONF} && \
+    printf "export JAVA_HOME=%s\nexport HADOOP_CONF_DIR=%s\nexport SPARK_DIST_CLASSPATH=\$(${HADOOP_HOME}/bin/hadoop classpath)\n" \
+      "${JAVA_HOME}" "${HADOOP_CONF_DIR}" > ${SPARK_CONF}/spark-env.sh && \
+    chmod +x ${SPARK_CONF}/spark-env.sh
+
+# Directorio de saída para o history server (local; os logs irán a HDFS segundo ENV)
+RUN mkdir -p ${SPARK_HOME}/logs/history && chmod -R a+rwX ${SPARK_HOME}/logs
+
+# Copiar entrypoint e permisos
+COPY ./entrypoint.sh /
+RUN chmod +x /entrypoint.sh
+
+# --- (opcional) volver ao usuario non root se a base usa 'hadoop' ---
+# Se a imaxe base tiña creado o usuario 'hadoop' (habitual), volve a el:
 USER hadoop
 
-# SSH para pseudo-distribuído
-RUN mkdir -p ~/.ssh \
- && ssh-keygen -t rsa -P "" -f ~/.ssh/id_rsa \
- && cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys \
- && chmod 700 ~/.ssh \
- && chmod 600 ~/.ssh/authorized_keys
+# Directorio de traballo
+WORKDIR ${SPARK_HOME}
 
-EXPOSE 8088 8042 9870 9864 9866 8020 9000
-CMD ["bash"]
+# Portos Spark / YARN / HDFS (os 50070/50075/50090 son antigos; deixo só os modernos)
+EXPOSE 8080 4040 7077 18080 8088 8042 9870 9864 9866 8020 9000
+
+# Comando por defecto
+CMD ["/bin/bash", "-c", "/entrypoint.sh"]

@@ -1,53 +1,139 @@
-version: '3'
+version: "3.8"
+
 services:
+  # ===================== HDFS =====================
   namenode:
-    image: adbgonzalez/hadoop:test-lean
+    image: adbgonzalez/spark:test-lean
     container_name: namenode
     hostname: namenode
+    user: "0"  # executar como root para poder chown nos volumes
     ports:
-      - "10071:50070"
-      - "9000:9000"
-      - "9870:9870"
+      - "9870:9870"   # HDFS NameNode UI
+      - "8020:8020"   # RPC NameNode
+      - "9000:9000"   # opcional, se o usas en core-site
+    environment:
+      - HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-/usr/local/hadoop/etc/hadoop}
+      - SPARK_HOME=${SPARK_HOME:-/opt/spark}
+    volumes:
+      - nn:/home/hadoop/namenode
+    command: >-
+      bash -lc '
+      mkdir -p /home/hadoop/namenode && chown -R hadoop:hadoop /home/hadoop/namenode && \
+      if [ ! -d /home/hadoop/namenode/current ]; then \
+        sudo -u hadoop hdfs namenode -format -nonInteractive -force; \
+      fi && \
+      sudo -u hadoop hdfs --daemon start namenode && \
+      tail -f /dev/null'
     networks:
       - hadoop
-    volumes:
-      - namenode_data:/home/hadoop/namenode
-      - ./start-dfs.sh:/start-dfs.sh
-    command: /bin/bash /start-dfs.sh 
-
 
   datanode:
-    image: adbgonzalez/hadoop:test-lean
+    image: adbgonzalez/spark:test-lean
     container_name: datanode
     hostname: datanode
+    user: "0"
+    depends_on:
+      - namenode
+    ports:
+      - "9864:9864"   # HDFS DataNode UI
+    environment:
+      - HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-/usr/local/hadoop/etc/hadoop}
+    volumes:
+      - dn:/home/hadoop/datanode
+    command: >-
+      bash -lc '
+      mkdir -p /home/hadoop/datanode && chown -R hadoop:hadoop /home/hadoop/datanode && \
+      sudo -u hadoop hdfs --daemon start datanode && \
+      tail -f /dev/null'
     networks:
       - hadoop
-    volumes:
-      - datanode_data:/home/hadoop/datanode/
-    command: hdfs datanode
 
+  # ===================== YARN =====================
   resourcemanager:
-    image: adbgonzalez/hadoop:test-lean
+    image: adbgonzalez/spark:test-lean
     container_name: resourcemanager
     hostname: resourcemanager
+    user: "0"
+    depends_on:
+      - namenode
     ports:
-      - "8088:8088"
+      - "8088:8088"   # YARN RM UI
+    environment:
+      - HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-/usr/local/hadoop/etc/hadoop}
+    command: >-
+      bash -lc '
+      sudo -u hadoop yarn --daemon start resourcemanager && \
+      tail -f /dev/null'
     networks:
       - hadoop
-    command: yarn resourcemanager
 
   nodemanager:
-    image: adbgonzalez/hadoop:test-lean
+    image: adbgonzalez/spark:test-lean
     container_name: nodemanager
     hostname: nodemanager
+    user: "0"
+    depends_on:
+      - resourcemanager
+      - datanode
+    ports:
+      - "8042:8042"   # YARN NodeManager UI
+    environment:
+      - HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-/usr/local/hadoop/etc/hadoop}
+    command: >-
+      bash -lc '
+      sudo -u hadoop yarn --daemon start nodemanager && \
+      tail -f /dev/null'
     networks:
       - hadoop
-    command: yarn nodemanager
+
+  # ========= Spark History Server (lerá logs dende HDFS) =========
+  spark-history:
+    image: adbgonzalez/spark:test-lean
+    container_name: spark-history
+    hostname: spark-history
+    user: "0"
+    depends_on:
+      - namenode
+      - resourcemanager
+    ports:
+      - "18080:18080"  # Spark History UI
+    environment:
+      - HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-/usr/local/hadoop/etc/hadoop}
+      - SPARK_HOME=${SPARK_HOME:-/opt/spark}
+      - SPARK_HISTORY_FS_LOG_DIRECTORY=hdfs:///spark-logs
+      - SPARK_EVENTLOG_ENABLED=true
+    command: >-
+      bash -lc '
+      # garantir dir en HDFS para event logs
+      sudo -u hadoop hdfs dfs -mkdir -p /spark-logs && \
+      sudo -u hadoop hdfs dfs -chmod 1777 /spark-logs && \
+      sudo -u hadoop ${SPARK_HOME}/sbin/start-history-server.sh && \
+      tail -f /dev/null'
+    networks:
+      - hadoop
+
+  # ========= Cliente para probar Spark/YARN =========
+  spark-client:
+    image: adbgonzalez/spark:test-lean
+    container_name: spark-client
+    hostname: spark-client
+    user: hadoop
+    depends_on:
+      - resourcemanager
+      - datanode
+    environment:
+      - HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-/usr/local/hadoop/etc/hadoop}
+      - SPARK_HOME=${SPARK_HOME:-/opt/spark}
+      - PYSPARK_PYTHON=python3
+    working_dir: /opt/spark
+    command: bash -lc "sleep infinity"
+    networks:
+      - hadoop
+
+volumes:
+  nn:
+  dn:
 
 networks:
   hadoop:
     driver: bridge
-
-volumes:
-  namenode_data:
-  datanode_data:
