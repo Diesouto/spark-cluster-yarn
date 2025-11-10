@@ -1,0 +1,17 @@
+# Núcleo científico e Spark
+pyspark==3.5.7
+findspark
+pandas
+numpy
+
+# JupyterLab e widgets
+jupyterlab
+ipywidgets
+
+# Visualización
+matplotlib
+seaborn
+plotly
+
+# Extra (opcional)
+notebook

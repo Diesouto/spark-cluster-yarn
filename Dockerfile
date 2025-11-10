@@ -62,11 +62,12 @@ RUN mkdir -p ${SPARK_CONF} && \
     chmod +x ${SPARK_CONF}/spark-env.sh
 
 # Directorio de saída para o history server (local; os logs irán a HDFS segundo ENV)
-RUN mkdir -p ${SPARK_HOME}/logs/history && chmod -R a+rwX ${SPARK_HOME}/logs
 
-# Copiar entrypoint e permisos
-COPY ./entrypoint.sh /
-RUN chmod +x /entrypoint.sh
+RUN chown -R hadoop:hadoop ${SPARK_HOME} && \
+    mkdir -p ${SPARK_HOME}/logs/history && \
+    chown -R hadoop:hadoop ${SPARK_HOME}/logs && \
+    chmod -R a+rwX ${SPARK_HOME}/logs
+
 
 # --- (opcional) volver ao usuario non root se a base usa 'hadoop' ---
 # Se a imaxe base tiña creado o usuario 'hadoop' (habitual), volve a el:
@@ -79,4 +80,4 @@ WORKDIR ${SPARK_HOME}
 EXPOSE 8080 4040 7077 18080 8088 8042 9870 9864 9866 8020 9000
 
 # Comando por defecto
-CMD ["/bin/bash", "-c", "/entrypoint.sh"]
+CMD ["/bin/bash", "-c", "sleep infinity"]
