@@ -1,4 +1,4 @@
-FROM adbgonzalez/spark:test-lean
+FROM adbgonzalez/spark:3.5.7
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends python3-pip && \

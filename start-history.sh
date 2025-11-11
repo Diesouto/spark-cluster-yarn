@@ -39,15 +39,7 @@ $HADOOP_HOME/bin/hdfs dfs -chmod 1777 "$EVENTLOG_DIR_URI" || true
 # 4) Crear o directorio local de logs se non existe
 mkdir -p "$SPARK_LOG_DIR"
 
-# 5) Configurar spark-defaults.conf (común a jobs e History)
-cat > "$SPARK_HOME/conf/spark-defaults.conf" <<EOF
-spark.eventLog.enabled true
-spark.eventLog.dir $EVENTLOG_DIR_URI
-spark.history.fs.logDirectory $EVENTLOG_DIR_URI
-spark.history.ui.port $SPARK_HISTORY_UI_PORT
-spark.history.fs.update.interval 10s
-EOF
-echo "Creado $SPARK_HOME/conf/spark-defaults.conf:"
+
 cat "$SPARK_HOME/conf/spark-defaults.conf"
 
 # 6) Lanzar o HistoryServer en primeiro plano
@@ -56,4 +48,3 @@ export SPARK_NO_DAEMONIZE=true
 
 echo "***** Iniciando Spark History Server *****"
 exec $SPARK_HOME/sbin/start-history-server.sh
-

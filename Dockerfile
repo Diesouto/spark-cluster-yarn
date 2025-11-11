@@ -1,4 +1,4 @@
-FROM adbgonzalez/hadoop:test-lean
+FROM adbgonzalez/hadoop:3.3.6
 
 # --- pasar a root para instalar e preparar Spark ---
 USER root
@@ -14,7 +14,7 @@ RUN apt-get update \
 
 # ---- Spark ----
 ARG SPARK_VERSION=3.5.7
-ARG SPARK_FILE=spark-${SPARK_VERSION}-bin-hadoop3.tgz
+ARG SPARK_FILE=spark-${SPARK_VERSION}-bin-without-hadoop.tgz
 ARG SPARK_URL=https://downloads.apache.org/spark/spark-${SPARK_VERSION}/${SPARK_FILE}
 
 ENV SPARK_HOME=/opt/spark
