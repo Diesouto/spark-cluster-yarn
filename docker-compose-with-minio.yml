@@ -8,7 +8,7 @@ services:
       - "9000:9000"
       - "9870:9870"
     networks:
-      - hadoop
+      - cluster
     volumes:
       - namenode_data:/home/hadoop/namenode
       - ./start-dfs.sh:/start-dfs.sh
@@ -20,7 +20,7 @@ services:
     container_name: datanode
     hostname: datanode
     networks:
-      - hadoop
+      - cluster
     volumes:
       - datanode_data:/home/hadoop/datanode/
     command: hdfs datanode
@@ -32,7 +32,7 @@ services:
     ports:
       - "8088:8088"
     networks:
-      - hadoop
+      - cluster
     command: yarn resourcemanager
 
   nodemanager:
@@ -40,7 +40,7 @@ services:
     container_name: nodemanager
     hostname: nodemanager
     networks:
-      - hadoop
+      - cluster
     command: yarn nodemanager
 
  # ========= Spark History Server =========
@@ -55,7 +55,7 @@ services:
     ports:
       - "18080:18080"
     networks:
-      - hadoop
+      - cluster
     environment:
       HADOOP_CONF_DIR: /usr/local/hadoop/etc/hadoop
       SPARK_ROLE: "history"
@@ -80,7 +80,7 @@ services:
       - resourcemanager
       - datanode
     networks:
-      - hadoop
+      - cluster
     ports:
       - "8888:8888"
     environment:
@@ -116,10 +116,10 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - hadoop
+      - cluster
 
 networks:
-  hadoop:
+  cluster:
     driver: bridge
 
 volumes:
