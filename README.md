@@ -85,7 +85,7 @@ Isto lanza os seguintes servizos:
 | **HDFS NameNode** | [http://localhost:9870](http://localhost:9870) | Navegador de ficheiros de HDFS |
 | **YARN ResourceManager** | [http://localhost:8088](http://localhost:8088) | Seguimento de tarefas YARN |
 | **Spark History Server** | [http://localhost:18080](http://localhost:18080) | Histórico de aplicacións Spark |
-| **MinIO** | http://localhost:9001](http://localhost:9001) | Acceso a almacenamento MinIO |
+| **MinIO** | [http://localhost:9001](http://localhost:9001) | Acceso a almacenamento MinIO |
 
 ---
 
